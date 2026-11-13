@@ -1,0 +1,17 @@
+node_modules/
+dist/
+coverage/
+data/
+*.tgz
+*.log
+.env
+.env.*
+!.env.example
+secrets/
+*.sqlite
+*.sqlite-journal
+*.db
+service-account*.json
+.DS_Store
+.idea/
+.vscode/

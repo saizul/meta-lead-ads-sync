@@ -1,0 +1,67 @@
+{
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8080,
+    "webhookPath": "/webhook",
+    "ackMode": "immediate",
+    "adminToken": "${ADMIN_TOKEN}"
+  },
+  "meta": {
+    "appSecret": "${META_APP_SECRET}",
+    "verifyToken": "${META_VERIFY_TOKEN}",
+    "accessToken": "${META_PAGE_ACCESS_TOKEN}",
+    "graphVersion": "v27.0",
+    "fields": ["id", "created_time", "ad_id", "form_id", "field_data"],
+    "appSecretProof": true
+  },
+  "store": {
+    "type": "json",
+    "path": "./data/leads.json",
+    "retentionDays": 90
+  },
+  "mapping": {
+    "columns": [
+      { "name": "Lead ID", "from": "lead.id" },
+      { "name": "Received (Dhaka)", "from": ["lead.created_time", "event.created_time"], "transform": ["datetime:Asia/Dhaka"] },
+      { "name": "Name", "from": ["field.full_name", "field.first_name"], "transform": ["collapse_spaces"] },
+      { "name": "Phone", "from": ["field.phone_number", "field.phone"], "transform": ["phone_bd"] },
+      { "name": "Email", "from": "field.email", "transform": ["trim", "lower"] },
+      { "name": "City", "from": "field.city", "default": "" },
+      { "name": "Form ID", "from": ["lead.form_id", "event.form_id"] },
+      { "name": "Ad ID", "from": ["lead.ad_id", "event.ad_id"] },
+      { "name": "Source", "value": "Facebook Lead Ads" }
+    ],
+    "includeUnmapped": true
+  },
+  "sinks": [
+    {
+      "type": "google_sheets",
+      "name": "sheet",
+      "spreadsheetId": "${GOOGLE_SPREADSHEET_ID}",
+      "range": "Leads!A1",
+      "credentialsFile": "/run/secrets/google-service-account.json",
+      "valueInputOption": "RAW",
+      "extraColumn": true
+    },
+    {
+      "type": "webhook",
+      "name": "n8n",
+      "url": "${N8N_WEBHOOK_URL}",
+      "secret": "${N8N_WEBHOOK_SECRET}"
+    },
+    {
+      "type": "telegram",
+      "name": "telegram",
+      "botToken": "${TELEGRAM_BOT_TOKEN}",
+      "chatId": "${TELEGRAM_CHAT_ID}",
+      "template": "<b>New lead</b> from {{Source}}\n{{#all}}"
+    }
+  ],
+  "processing": {
+    "concurrency": 2,
+    "retryIntervalSeconds": 300,
+    "maxAttempts": 8,
+    "sinkRetryAttempts": 3
+  },
+  "logLevel": "info"
+}

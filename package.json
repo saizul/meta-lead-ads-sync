@@ -1,0 +1,37 @@
+{
+  "name": "meta-lead-ads-sync",
+  "version": "0.1.0",
+  "description": "Webhook service for Facebook and Instagram Lead Ads: verifies X-Hub-Signature-256, fetches leads from the Graph API, skips duplicates and delivers them to Google Sheets, n8n or any webhook, and Telegram.",
+  "keywords": ["facebook-lead-ads", "instagram", "meta", "webhook", "graph-api", "google-sheets", "n8n", "telegram", "bangladesh", "typescript"],
+  "author": "Saizul Amin (https://github.com/saizul)",
+  "license": "MIT",
+  "homepage": "https://github.com/saizul/meta-lead-ads-sync#readme",
+  "repository": { "type": "git", "url": "git+https://github.com/saizul/meta-lead-ads-sync.git" },
+  "bugs": { "url": "https://github.com/saizul/meta-lead-ads-sync/issues" },
+  "type": "module",
+  "main": "./dist/src/index.js",
+  "types": "./dist/src/index.d.ts",
+  "exports": {
+    ".": { "types": "./dist/src/index.d.ts", "default": "./dist/src/index.js" },
+    "./package.json": "./package.json"
+  },
+  "bin": { "meta-lead-ads-sync": "./dist/src/cli.js" },
+  "files": ["dist/src", "README.md", "CHANGELOG.md", "LICENSE", "examples/config.example.json"],
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "clean": "node scripts/clean.mjs",
+    "build": "npm run clean && tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "eslint . && npm run typecheck",
+    "test": "npm run build && node --test dist/test/*.test.js",
+    "start": "node dist/src/cli.js serve",
+    "prepublishOnly": "npm run lint && npm test"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.10.0",
+    "eslint": "^10.0.0",
+    "typescript": "~5.9.3",
+    "typescript-eslint": "^8.72.0"
+  }
+}

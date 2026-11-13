@@ -1,0 +1,31 @@
+# Caddy obtains and renews the TLS certificate for {$LEADS_DOMAIN} on its own.
+{$LEADS_DOMAIN} {
+	encode zstd gzip
+
+	# Meta's notifications are small; refuse anything large before it reaches the app.
+	request_body {
+		max_size 1MB
+	}
+
+	# Admin endpoints are not exposed to the internet. Use them from the host:
+	#   docker compose exec lead-sync wget -qO- \
+	#     --header "Authorization: Bearer $ADMIN_TOKEN" http://127.0.0.1:8080/admin/stats
+	handle /admin/* {
+		respond 404
+	}
+
+	handle {
+		reverse_proxy lead-sync:8080
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		-Server
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

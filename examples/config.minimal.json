@@ -1,0 +1,10 @@
+{
+  "meta": {
+    "appSecret": "${META_APP_SECRET}",
+    "verifyToken": "${META_VERIFY_TOKEN}",
+    "accessToken": "${META_PAGE_ACCESS_TOKEN}"
+  },
+  "sinks": [
+    { "type": "webhook", "name": "n8n", "url": "${N8N_WEBHOOK_URL}", "secret": "${N8N_WEBHOOK_SECRET:-}" }
+  ]
+}

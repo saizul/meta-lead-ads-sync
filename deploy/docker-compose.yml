@@ -1,0 +1,48 @@
+# Production example: the service behind Caddy, which gets and renews a Let's Encrypt
+# certificate for LEADS_DOMAIN automatically.
+#
+#   cp ../.env.example .env            # fill in the values
+#   cp ../examples/config.example.json config.json
+#   mkdir -p secrets && cp /path/to/service-account.json secrets/google-service-account.json
+#   docker compose up -d --build
+#
+# Webhook callback URL for the Meta App Dashboard: https://<LEADS_DOMAIN>/webhook
+services:
+  lead-sync:
+    build: ..
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      CONFIG_PATH: /app/config/config.json
+    volumes:
+      - ./config.json:/app/config/config.json:ro
+      - ./secrets/google-service-account.json:/run/secrets/google-service-account.json:ro
+      - lead-data:/app/data
+    expose:
+      - "8080"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - lead-sync
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      LEADS_DOMAIN: ${LEADS_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  lead-data:
+  caddy-data:
+  caddy-config:
