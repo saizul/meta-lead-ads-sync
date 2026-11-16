@@ -7,6 +7,7 @@ import { GraphClient } from './graph.js';
 import { createJsonLogger, type Logger } from './logger.js';
 import { FieldMapper } from './mapping.js';
 import { LeadProcessor } from './processor.js';
+import { SinkRoute } from './routing.js';
 import { WorkQueue } from './queue.js';
 import { createHttpServer } from './server.js';
 import { GoogleSheetsSink } from './sinks/google-sheets.js';
@@ -101,6 +102,11 @@ export async function createApp(config: AppConfig, deps: AppDeps = {}): Promise<
     logger,
   });
 
+  const routes: Record<string, SinkRoute> = {};
+  for (const c of config.sinks) {
+    if (c.enabled !== false && c.when) routes[c.name ?? c.type] = new SinkRoute(c.when, `sink ${c.name ?? c.type}.when`);
+  }
+
   const formMappers: Record<string, FieldMapper> = {};
   for (const [form, spec] of Object.entries(config.formMappings)) formMappers[form] = new FieldMapper(spec);
 
@@ -117,6 +123,7 @@ export async function createApp(config: AppConfig, deps: AppDeps = {}): Promise<
     sinks,
     mapper: new FieldMapper(config.mapping),
     formMappers,
+    routes,
     pageIds: config.meta.pageIds,
     formIds: config.meta.formIds,
     sinkRetry: { attempts: config.processing.sinkRetryAttempts, sleep },

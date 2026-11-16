@@ -6,6 +6,9 @@ import { parseArgs } from 'node:util';
 import { createApp, type AppDeps } from './app.js';
 import { loadConfig } from './config.js';
 import { LeadSyncError } from './errors.js';
+import { FieldMapper } from './mapping.js';
+import { SinkRoute } from './routing.js';
+import type { Lead, LeadgenEvent } from './types.js';
 import { parseBdPhone } from './phone-bd.js';
 import { signPayload } from './signature.js';
 import { VERSION } from './version.js';
@@ -18,6 +21,9 @@ Usage:
   meta-lead-ads-sync replay LEADGEN_ID [--page-id ID] [--form-id ID] [--force] [--config FILE]
                                                      fetch and deliver one lead now
   meta-lead-ads-sync retry [--config FILE]           retry failed and partial leads once
+  meta-lead-ads-sync route LEAD_FILE [--page-id ID] [--form-id ID] [--config FILE]
+                                                     show which sinks a lead (Graph API JSON)
+                                                     would go to, offline
   meta-lead-ads-sync sign FILE                       print X-Hub-Signature-256 for a body
                                                      (secret from META_APP_SECRET)
   meta-lead-ads-sync phone NUMBER...                 normalise Bangladeshi phone numbers
@@ -111,7 +117,7 @@ export async function run(argv: string[], io: CliIo = defaultIo): Promise<number
         io.out(`  store:   ${config.store.type}${config.store.path ? ` (${config.store.path})` : ''}`);
         io.out(`  mapping: ${config.mapping.columns.map((c) => c.name).join(', ')}`);
         for (const s of config.sinks) {
-          io.out(`  sink:    ${s.name ?? s.type} [${s.type}]${s.enabled === false ? ' (disabled)' : ''}`);
+          io.out(`  sink:    ${s.name ?? s.type} [${s.type}]${s.enabled === false ? ' (disabled)' : ''}${s.when ? ' (routed)' : ''}`);
         }
         if (config.sinks.length === 0) io.out('  sink:    none');
         return 0;
@@ -159,6 +165,43 @@ export async function run(argv: string[], io: CliIo = defaultIo): Promise<number
         } finally {
           await app.store.close();
         }
+      }
+      case 'route': {
+        if (!rest[0]) {
+          io.err('route: give a lead JSON file (the Graph API response for one lead)');
+          return 2;
+        }
+        const config = await loadConfig(configPath, io.env);
+        let lead: Lead;
+        try {
+          lead = JSON.parse(await readFile(rest[0], 'utf8')) as Lead;
+        } catch (error) {
+          io.err(`route: cannot read ${rest[0]}: ${(error as Error).message}`);
+          return 2;
+        }
+        if (!lead || typeof lead !== 'object' || typeof lead.id !== 'string') {
+          io.err('route: the lead file needs at least an "id"');
+          return 2;
+        }
+        const event: LeadgenEvent = { leadgenId: lead.id, pageId: values['page-id'] ?? '' };
+        const formId = values['form-id'] ?? lead.form_id;
+        if (formId) event.formId = formId;
+        const spec = (formId && config.formMappings[formId]) || config.mapping;
+        const mapped = new FieldMapper(spec).map(lead, event);
+        const ctx = { event, lead, mapped };
+        let routed = 0;
+        for (const s of config.sinks) {
+          const name = s.name ?? s.type;
+          if (s.enabled === false) {
+            io.out(`${name}\tdisabled`);
+            continue;
+          }
+          const decision = s.when ? new SinkRoute(s.when, `${name}.when`).evaluate(ctx) : { matched: true, reason: '' };
+          if (decision.matched) routed++;
+          io.out(decision.matched ? `${name}\tdeliver` : `${name}\tskip\t${decision.reason}`);
+        }
+        io.out(`${routed} sink(s) would get lead ${lead.id}`);
+        return 0;
       }
       case 'retry': {
         const config = await loadConfig(configPath, io.env);

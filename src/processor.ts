@@ -2,6 +2,7 @@ import type { GraphClient } from './graph.js';
 import { silentLogger, type Logger } from './logger.js';
 import type { FieldMapper } from './mapping.js';
 import { withRetry, type RetryOptions } from './retry.js';
+import type { SinkRoute } from './routing.js';
 import type { Sink } from './sinks/types.js';
 import type { IdempotencyStore, LeadRecord } from './store/types.js';
 import type { Lead, LeadgenEvent } from './types.js';
@@ -13,6 +14,8 @@ export interface ProcessResult {
   status: ProcessStatus;
   /** Sinks that have the lead (including earlier attempts). */
   delivered: string[];
+  /** Sinks left out because the lead did not match their `when` rule. */
+  routedAway?: Array<{ sink: string; reason: string }>;
   errors: Array<{ sink: string; message: string }>;
 }
 
@@ -23,6 +26,8 @@ export interface ProcessorOptions {
   mapper: FieldMapper;
   /** Mappings by form id, for forms with different questions. */
   formMappers?: Record<string, FieldMapper>;
+  /** Routing rules by sink name. A sink without one gets every lead. */
+  routes?: Record<string, Pick<SinkRoute, 'evaluate'>>;
   /** Only process these Page ids (all when empty). */
   pageIds?: string[];
   /** Only process these form ids (all when empty). */
@@ -95,7 +100,20 @@ export class LeadProcessor {
 
     const delivered = new Set(record.delivered);
     const errors: ProcessResult['errors'] = [];
+    const routedAway: NonNullable<ProcessResult['routedAway']> = [];
+    const targets: Sink[] = [];
     for (const sink of this.opts.sinks) {
+      // A sink that already has the lead keeps it, even if its rule changed since.
+      const route = delivered.has(sink.name) ? undefined : this.opts.routes?.[sink.name];
+      const decision = route?.evaluate(ctx);
+      if (decision && !decision.matched) {
+        routedAway.push({ sink: sink.name, reason: decision.reason });
+        this.log.info('lead not routed to sink', { leadgenId: id, sink: sink.name, reason: decision.reason });
+      } else {
+        targets.push(sink);
+      }
+    }
+    for (const sink of targets) {
       if (delivered.has(sink.name)) continue;
       try {
         await withRetry(() => sink.send(ctx), {
@@ -117,14 +135,16 @@ export class LeadProcessor {
         this.log.error('sink failed', { leadgenId: id, sink: sink.name, error: message });
       }
     }
-    const all = this.opts.sinks.every((s) => delivered.has(s.name));
+    const all = targets.every((s) => delivered.has(s.name));
     const status: LeadRecord['status'] = all ? 'done' : delivered.size > 0 ? 'partial' : 'failed';
     const next: LeadRecord = { ...record, status, delivered: [...delivered] };
     if (formId) next.formId = formId;
     if (errors.length) next.lastError = errors.map((e) => `${e.sink}: ${e.message}`).join('; ');
     else delete next.lastError;
     await this.save(id, next);
-    return { leadgenId: id, status, delivered: [...delivered], errors };
+    const result: ProcessResult = { leadgenId: id, status, delivered: [...delivered], errors };
+    if (routedAway.length) result.routedAway = routedAway;
+    return result;
   }
 
   private async save(id: string, record: LeadRecord): Promise<void> {

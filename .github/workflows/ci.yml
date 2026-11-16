@@ -53,6 +53,7 @@ jobs:
           node dist/src/cli.js check-config --config examples/config.example.json
           node dist/src/cli.js phone 01712-345678 "+880 1812 345678"
           node dist/src/cli.js sign examples/sample-webhook.json
+          node dist/src/cli.js route examples/sample-lead.json --config examples/config.example.json
           node examples/library-usage.mjs
 
   docker:

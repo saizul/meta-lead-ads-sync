@@ -54,7 +54,11 @@
       "name": "telegram",
       "botToken": "${TELEGRAM_BOT_TOKEN}",
       "chatId": "${TELEGRAM_CHAT_ID}",
-      "template": "<b>New lead</b> from {{Source}}\n{{#all}}"
+      "template": "<b>New lead</b> from {{Source}}\n{{#all}}",
+      "when": {
+        "all": [{ "from": "column.City", "equals": ["Dhaka", "Gazipur", "Narayanganj"] }],
+        "none": [{ "from": "column.Email", "matches": "@(example|test)\\.(com|org)$" }]
+      }
     }
   ],
   "processing": {
