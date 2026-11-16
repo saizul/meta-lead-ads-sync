@@ -16,6 +16,7 @@ export { DEFAULT_MAPPING, FieldMapper, fieldMap, parseTimestamp, type ColumnSpec
 export { normalizeBdPhone, parseBdPhone, toAsciiDigits, type BdOperator, type BdPhoneResult, type PhoneFormat } from './phone-bd.js';
 export { LeadProcessor, type ProcessResult, type ProcessStatus, type ProcessorOptions } from './processor.js';
 export { WorkQueue } from './queue.js';
+export { SinkRoute, type ConditionSpec, type RouteDecision, type RouteSpec } from './routing.js';
 export { backoffDelay, withRetry, type RetryOptions } from './retry.js';
 export { createHandler, createHttpServer, type HandlerOptions } from './server.js';
 export { SIGNATURE_HEADER, appSecretProof, safeEqual, signPayload, verifySignature, type SignatureCheck } from './signature.js';

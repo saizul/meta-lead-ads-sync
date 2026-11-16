@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Per-sink routing: a `when` rule on any sink limits it to leads that match by form, Page, `is_organic`,
+  `platform` and `all` / `any` / `none` conditions (`equals`, `notEquals`, `matches`, `exists`) on form answers,
+  lead and webhook values or mapped columns. Rules are validated when the config is loaded.
+- `route LEAD_FILE` command: shows offline which sinks a lead would be delivered to and why the others are skipped;
+  `check-config` marks routed sinks.
+- `routedAway` in processing results (CLI `replay`, admin replay), and the `SinkRoute` class in the library API.
+
 ## [0.1.0] - 2026-11-13
 
 First public release.

@@ -3,12 +3,15 @@ import { ConfigError } from './errors.js';
 import { DEFAULT_GRAPH_VERSION } from './graph.js';
 import type { LogLevel } from './logger.js';
 import { DEFAULT_MAPPING, FieldMapper, type MappingSpec } from './mapping.js';
+import { SinkRoute, type RouteSpec } from './routing.js';
 import type { StoreConfig } from './store/index.js';
 
 export interface GoogleSheetsSinkConfig {
   type: 'google_sheets';
   name?: string;
   enabled?: boolean;
+  /** Only leads matching this rule go to the sink (see `routing.ts`). */
+  when?: RouteSpec;
   spreadsheetId: string;
   range?: string;
   valueInputOption?: 'RAW' | 'USER_ENTERED';
@@ -28,6 +31,8 @@ export interface WebhookSinkConfig {
   type: 'webhook';
   name?: string;
   enabled?: boolean;
+  /** Only leads matching this rule go to the sink (see `routing.ts`). */
+  when?: RouteSpec;
   url: string;
   secret?: string;
   headers?: Record<string, string>;
@@ -39,6 +44,8 @@ export interface TelegramSinkConfig {
   type: 'telegram';
   name?: string;
   enabled?: boolean;
+  /** Only leads matching this rule go to the sink (see `routing.ts`). */
+  when?: RouteSpec;
   botToken: string;
   chatId: string | number;
   template?: string;
@@ -169,7 +176,11 @@ function parseSink(raw: unknown, i: number): SinkConfig {
   const type = s.type;
   const name = str(s.name, `${path}.name`);
   const enabled = bool(s.enabled, `${path}.enabled`, true);
-  const base = { ...(name ? { name } : {}), enabled };
+  const base: { name?: string; enabled: boolean; when?: RouteSpec } = { ...(name ? { name } : {}), enabled };
+  if (s.when !== undefined) {
+    new SinkRoute(s.when as RouteSpec, `${path}.when`); // validate now
+    base.when = s.when as RouteSpec;
+  }
   if (type === 'google_sheets') {
     const credentialsFile = str(s.credentialsFile, `${path}.credentialsFile`);
     const credentialsJson = str(s.credentialsJson, `${path}.credentialsJson`);

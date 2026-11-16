@@ -31,6 +31,7 @@ the built-in `fetch`. Google's service-account JWT is signed with `node:crypto`;
 - [Configuration](#configuration)
 - [Field mapping](#field-mapping)
 - [Sinks](#sinks)
+- [Routing leads to sinks](#routing-leads-to-sinks)
 - [Deployment with Docker and Caddy](#deployment-with-docker-and-caddy)
 - [Admin endpoints](#admin-endpoints)
 - [Library use](#library-use)
@@ -65,6 +66,9 @@ the built-in `fetch`. Google's service-account JWT is signed with `node:crypto`;
   - **Webhook / n8n**: JSON POST with an `Idempotency-Key` header and an optional `X-Signature-256` HMAC so the
     receiver can check it came from you
   - **Telegram**: Bot API `sendMessage` in HTML mode with a template, forum topics, `retry_after` honoured on 429
+- **Routing**: a `when` rule per sink sends it only the leads it should get, by form, Page, organic or paid,
+  platform and conditions on answers or mapped columns (`equals`, `notEquals`, `matches`, `exists`), with `all`,
+  `any` and `none`. `route` shows offline which sinks a lead would go to and why.
 - **Field mapping** from a config file: form answers, lead and webhook properties, constants, fallbacks, defaults,
   per-form mappings and transforms (`phone_bd`, `datetime:Asia/Dhaka`, `lower`, `trim`, ...).
 - **Bangladeshi phone normalisation**: `01712-345678`, `+880 1712 345678`, `8801712345678`, `00880...`,
@@ -159,6 +163,7 @@ $ meta-lead-ads-sync check-config --config config.json      # validate, list sin
 $ meta-lead-ads-sync replay 900000000000001 --page-id 111111111111111   # fetch and deliver one lead now
 $ meta-lead-ads-sync replay 900000000000001 --force         # forget it first, deliver again to every sink
 $ meta-lead-ads-sync retry                                  # one retry sweep of failed/partial leads
+$ meta-lead-ads-sync route examples/sample-lead.json        # which sinks would get this lead, and why not (offline)
 $ META_APP_SECRET=... meta-lead-ads-sync sign body.json     # X-Hub-Signature-256 for a test request
 $ meta-lead-ads-sync phone 01712-345678 "+880 1812 345678" ০১৯১২৩৪৫৬৭৮
 01712-345678      +8801712345678  01712345678  Grameenphone
@@ -197,7 +202,7 @@ unset variable without a default stops start-up with a clear error. Keep secrets
 | `store.retentionDays` | `90` | forget handled leads after this many days (`0` keeps them) |
 | `mapping` | built-in | see [Field mapping](#field-mapping) |
 | `formMappings` | `{}` | `{ "<form id>": <mapping> }` |
-| `sinks` | `[]` | see [Sinks](#sinks); each takes `name` and `enabled` |
+| `sinks` | `[]` | see [Sinks](#sinks); each takes `name`, `enabled` and `when` ([routing](#routing-leads-to-sinks)) |
 | `processing.concurrency` | `2` | leads processed in parallel |
 | `processing.retryIntervalSeconds` | `300` | retry sweep interval, `0` disables |
 | `processing.maxAttempts` | `8` | attempts per lead before giving up |
@@ -324,6 +329,57 @@ are not.
 Create a bot with @BotFather and add it to the group or channel. `{{Column}}` inserts a mapped value (HTML-escaped),
 `{{#all}}` every non-empty column. The default template is `<b>New lead</b>` followed by `{{#all}}`. On `429` the
 `retry_after` value is respected.
+
+## Routing leads to sinks
+
+By default every sink gets every lead. Add `when` to a sink to send it only the leads that match:
+
+```json
+{
+  "type": "telegram",
+  "name": "dhaka-sales",
+  "botToken": "${TELEGRAM_BOT_TOKEN}",
+  "chatId": "${TELEGRAM_DHAKA_CHAT_ID}",
+  "when": {
+    "forms": ["222222222222222"],
+    "organic": false,
+    "all": [{ "from": "column.City", "equals": ["Dhaka", "Gazipur", "Narayanganj"] }],
+    "any": [{ "from": "field.budget", "matches": "lakh|50k" }, { "from": "field.company_name", "exists": true }],
+    "none": [{ "from": "column.Email", "matches": "@(example|test)\\.(com|org)$" }]
+  }
+}
+```
+
+| Key | Matches when |
+| --- | --- |
+| `forms` / `pages` | the lead's form id / Page id is in the list (array or comma-separated string) |
+| `organic` | `lead.is_organic` is this value (`false`: leads from ads); add `is_organic` to `meta.fields` |
+| `platforms` | `lead.platform` is one of these (`fb`, `ig`); add `platform` to `meta.fields` |
+| `all` | every condition holds |
+| `any` | at least one condition holds |
+| `none` | no condition holds |
+
+Every key that is present must match. A condition reads one value with `from` (`field.<name>`, `lead.<key>`,
+`event.<key>`, or `column.<name>` for a mapped column after its transforms, so `column.Phone` is already
+`+880...`) and tests it with `equals` (a value or a list), `notEquals`, `matches` (a regular expression) and/or
+`exists` (`true`: not empty, `false`: empty). Tests in one condition must all hold. Comparisons ignore case and
+surrounding spaces. Mistakes (unknown keys, bad sources, invalid regular expressions) stop start-up.
+
+A lead that a rule leaves out is not an error: the lead is `done` once every sink it was routed to has it, and the
+processing result lists the other sinks under `routedAway` with the reason. Rules are checked again on retries, but a
+sink that already has a lead is never asked to drop it. Check a rule before deploying with `route`, which maps a lead
+file (a Graph API response, like [examples/sample-lead.json](examples/sample-lead.json)) and prints one line per
+sink without network access:
+
+```console
+$ meta-lead-ads-sync route examples/sample-lead.json --config examples/config.example.json
+sheet     deliver
+n8n       deliver
+telegram  skip  none: column.Email matches /@(example|test)\.(com|org)$/ matched
+2 sink(s) would get lead 900000000000001
+```
+
+`--form-id` and `--page-id` stand in for the webhook values when the file has no `form_id` or the rule uses `pages`.
 
 ## Deployment with Docker and Caddy
 
